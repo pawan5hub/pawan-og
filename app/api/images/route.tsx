@@ -55,12 +55,21 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
 
-    // Get parameters
-    const title = searchParams.get("title") || "Welcome to My Blog";
-    const subtitle = searchParams.get("subtitle") || "";
+    // Check if any query params other than 'theme' are provided
+    const paramsWithoutTheme = Array.from(searchParams.keys()).filter(key => key !== 'theme');
+    const hasQueryParams = paramsWithoutTheme.length > 0;
+
+    // Get parameters with conditional defaults
+    const title = searchParams.get("title") || (hasQueryParams ? "Welcome to My Blog" : "Welcome to My Portfolio");
+    const subtitle = searchParams.get("subtitle") || (hasQueryParams ? "" : "I'm Pawan — Lead .NET Full-Stack Developer");
+    const desc = searchParams.get("desc") || (hasQueryParams ? "" : "11+ years of experience designing, developing, and deploying enterprise-grade web applications and now advancing towards AI & ML based solutions.");
     const themeName = (searchParams.get("theme") || "charcoal") as keyof typeof themes;
-    const author = searchParams.get("author") || "Your Name";
-    const date = searchParams.get("date") || "";
+    const author = searchParams.get("author") || "Pawan Pandey";
+    const date = searchParams.get("date") || (hasQueryParams ? "" : new Date().toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    }));
 
     // Get theme colors
     const theme = themes[themeName] || themes.charcoal;
@@ -132,17 +141,88 @@ export async function GET(request: Request) {
             }}
           />
 
+          {/* Profile Image - Only when no params - Half visible at bottom right */}
+          {!hasQueryParams && (
+            <div
+              style={{
+                position: "absolute",
+                right: "1px",
+                bottom: "0",
+                height: "630px",
+                width: "350px",
+                display: "flex",
+                alignItems: "flex-end",
+                justifyContent: "flex-end",
+                zIndex: 0,
+                overflow: "visible",
+              }}
+            >
+              {/* Image container with gradient overlay */}
+              <div
+                style={{
+                  position: "relative",
+                  height: "630px",
+                  width: "350px",
+                  display: "flex",
+                  alignItems: "flex-end",
+                  justifyContent: "flex-end",
+                }}
+              >
+                <img
+                  src="https://pawan.net.in/assets/images/profile-wbg2.png"
+                  width="300"
+                  height="330"
+                  style={{
+                    position: "absolute",
+                    bottom: "0",
+                    right: "0",
+                    objectFit: "cover",
+                    objectPosition: "center bottom",
+                  }}
+                />
+                {/* Gradient overlay - bottom to top - covers lower chest down */}
+                <div
+                  style={{
+                    position: "absolute",
+                    bottom: "0",
+                    left: "0",
+                    right: "0",
+                    height: "280px",
+                    background: `linear-gradient(to top, ${theme.bgGradientEnd} 0%, ${theme.bgGradientEnd}f8 15%, ${theme.bgGradientEnd}e6 30%, ${theme.bgGradientEnd}b8 50%, ${theme.bgGradientEnd}80 70%, ${theme.bgGradientEnd}40 85%, transparent 100%)`,
+                    zIndex: 1,
+                    pointerEvents: "none",
+                  }}
+                />
+                {/* Side gradient to blend with background on left */}
+                <div
+                  style={{
+                    position: "absolute",
+                    bottom: "0",
+                    left: "0",
+                    top: "0",
+                    width: "200px",
+                    background: `linear-gradient(to right, ${theme.bgGradientEnd} 0%, ${theme.bgGradientEnd}f0 20%, ${theme.bgGradientEnd}c0 40%, ${theme.bgGradientEnd}80 60%, ${theme.bgGradientEnd}40 80%, transparent 100%)`,
+                    zIndex: 1,
+                    pointerEvents: "none",
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
           {/* Main content container */}
           <div
             style={{
               display: "flex",
               flexDirection: "column",
-              justifyContent: "center",
+              justifyContent: "flex-start",
               alignItems: "flex-start",
               padding: "80px 100px",
+              paddingTop: "100px",
               height: "100%",
               position: "relative",
-              zIndex: 1,
+              zIndex: 2,
+              maxWidth: "100%",
             }}
           >
             {/* Accent bar */}
@@ -184,11 +264,29 @@ export async function GET(request: Request) {
                   lineHeight: 1.4,
                   maxWidth: "850px",
                   display: "flex",
-                  marginBottom: "50px",
+                  marginBottom: desc ? "30px" : "50px",
                   letterSpacing: "-0.5px",
                 }}
               >
                 {subtitle}
+              </div>
+            )}
+
+            {/* Description */}
+            {desc && (
+              <div
+                style={{
+                  fontSize: 24,
+                  fontWeight: 300,
+                  color: theme.textMuted,
+                  lineHeight: 1.5,
+                  maxWidth: "800px",
+                  display: "flex",
+                  marginBottom: "50px",
+                  letterSpacing: "0px",
+                }}
+              >
+                {desc}
               </div>
             )}
 
