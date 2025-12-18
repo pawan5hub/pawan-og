@@ -51,28 +51,100 @@ const themes = {
   },
 };
 
+// Helper function to calculate dynamic font sizes
+function calculateFontSizes(
+  title: string,
+  subtitle: string,
+  desc: string,
+  hasImage: boolean
+) {
+  const titleLength = title.length;
+  const subtitleLength = subtitle.length;
+  const descLength = desc.length;
+
+  // Calculate title size (base: 80, min: 48, max: 80)
+  let titleSize = 80;
+  if (titleLength > 50) titleSize = 48;
+  else if (titleLength > 30) titleSize = 60;
+  else if (titleLength > 20) titleSize = 70;
+
+  // Calculate subtitle size (base: 38, min: 24, max: 38)
+  let subtitleSize = 38;
+  if (subtitleLength > 80) subtitleSize = 24;
+  else if (subtitleLength > 50) subtitleSize = 28;
+  else if (subtitleLength > 30) subtitleSize = 32;
+
+  // Calculate description size (base: 24, min: 18, max: 24)
+  let descSize = 24;
+  if (descLength > 150) descSize = 18;
+  else if (descLength > 100) descSize = 20;
+  else if (descLength > 80) descSize = 22;
+
+  // Adjust max widths based on whether image is present
+  const maxWidth = hasImage ? "650px" : "950px";
+
+  return {
+    titleSize,
+    subtitleSize,
+    descSize,
+    maxWidth,
+  };
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
 
     // Check if any query params other than 'theme' are provided
-    const paramsWithoutTheme = Array.from(searchParams.keys()).filter(key => key !== 'theme');
+    const paramsWithoutTheme = Array.from(searchParams.keys()).filter(
+      (key) => key !== "theme"
+    );
     const hasQueryParams = paramsWithoutTheme.length > 0;
 
     // Get parameters with conditional defaults
-    const title = searchParams.get("title") || (hasQueryParams ? "Welcome to My Blog" : "Welcome to My Portfolio");
-    const subtitle = searchParams.get("subtitle") || (hasQueryParams ? "" : "I'm Pawan — Lead .NET Full-Stack Developer");
-    const desc = searchParams.get("desc") || (hasQueryParams ? "" : "11+ years of experience designing, developing, and deploying enterprise-grade web applications and now advancing towards AI & ML based solutions.");
+    const title =
+      searchParams.get("title") ||
+      (hasQueryParams ? "Welcome to My Blog" : "Welcome to My Portfolio");
+    const subtitle =
+      searchParams.get("subtitle") ||
+      (hasQueryParams ? "" : "I'm Pawan — Lead .NET Full-Stack Developer");
+    const desc =
+      searchParams.get("desc") ||
+      (hasQueryParams
+        ? ""
+        : "11+ years of experience designing, developing, and deploying enterprise-grade web applications and now advancing towards AI & ML based solutions.");
     const themeName = (searchParams.get("theme") || "charcoal") as keyof typeof themes;
     const author = searchParams.get("author") || "Pawan Pandey";
-    const date = searchParams.get("date") || (hasQueryParams ? "" : new Date().toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    }));
+    const date =
+      searchParams.get("date") ||
+      (hasQueryParams
+        ? ""
+        : new Date().toLocaleDateString("en-US", {
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          }));
 
     // Get theme colors
     const theme = themes[themeName] || themes.charcoal;
+
+    // Calculate dynamic sizes
+    const { titleSize, subtitleSize, descSize, maxWidth } = calculateFontSizes(
+      title,
+      subtitle,
+      desc,
+      !hasQueryParams
+    );
+
+    // Calculate total content height to determine if we need to hide image
+    const estimatedContentHeight =
+      titleSize * 1.3 + // title with line height
+      (subtitle ? subtitleSize * 1.5 : 0) + // subtitle with spacing
+      (desc ? descSize * 1.8 : 0) + // description with spacing
+      120 + // author section
+      180; // padding and margins
+
+    const shouldShowImage = !hasQueryParams && estimatedContentHeight < 500;
 
     return new ImageResponse(
       (
@@ -141,8 +213,8 @@ export async function GET(request: Request) {
             }}
           />
 
-          {/* Profile Image - Only when no params - Half visible at bottom right */}
-          {!hasQueryParams && (
+          {/* Profile Image - Only when no params and content fits */}
+          {shouldShowImage && (
             <div
               style={{
                 position: "absolute",
@@ -157,7 +229,6 @@ export async function GET(request: Request) {
                 overflow: "visible",
               }}
             >
-              {/* Image container with gradient overlay */}
               <div
                 style={{
                   position: "relative",
@@ -180,7 +251,6 @@ export async function GET(request: Request) {
                     objectPosition: "center bottom",
                   }}
                 />
-                {/* Gradient overlay - bottom to top - covers lower chest down */}
                 <div
                   style={{
                     position: "absolute",
@@ -193,7 +263,6 @@ export async function GET(request: Request) {
                     pointerEvents: "none",
                   }}
                 />
-                {/* Side gradient to blend with background on left */}
                 <div
                   style={{
                     position: "absolute",
@@ -240,15 +309,16 @@ export async function GET(request: Request) {
             {/* Title */}
             <div
               style={{
-                fontSize: 80,
+                fontSize: titleSize,
                 fontWeight: 900,
                 color: theme.textPrimary,
                 lineHeight: 1.1,
                 marginBottom: subtitle ? 30 : 50,
-                maxWidth: "900px",
+                maxWidth: maxWidth,
                 display: "flex",
                 textShadow: `0 4px 20px ${theme.shadowColor}, 0 0 40px ${theme.glowColor}`,
-                letterSpacing: "-2px",
+                letterSpacing: titleSize > 60 ? "-2px" : "-1px",
+                flexWrap: "wrap",
               }}
             >
               {title}
@@ -258,14 +328,15 @@ export async function GET(request: Request) {
             {subtitle && (
               <div
                 style={{
-                  fontSize: 38,
+                  fontSize: subtitleSize,
                   fontWeight: 400,
                   color: theme.textSecondary,
                   lineHeight: 1.4,
-                  maxWidth: "850px",
+                  maxWidth: maxWidth,
                   display: "flex",
                   marginBottom: desc ? "30px" : "50px",
                   letterSpacing: "-0.5px",
+                  flexWrap: "wrap",
                 }}
               >
                 {subtitle}
@@ -276,14 +347,15 @@ export async function GET(request: Request) {
             {desc && (
               <div
                 style={{
-                  fontSize: 24,
+                  fontSize: descSize,
                   fontWeight: 300,
                   color: theme.textMuted,
                   lineHeight: 1.5,
-                  maxWidth: "800px",
+                  maxWidth: maxWidth,
                   display: "flex",
                   marginBottom: "50px",
                   letterSpacing: "0px",
+                  flexWrap: "wrap",
                 }}
               >
                 {desc}
