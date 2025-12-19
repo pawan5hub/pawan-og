@@ -1,6 +1,6 @@
 import { ImageResponse } from "@vercel/og";
 
-export const runtime = "edge";
+export const runtime = "nodejs";
 
 // Theme configurations matching your CSS
 const themes = {
@@ -52,12 +52,7 @@ const themes = {
 };
 
 // Helper function to calculate dynamic font sizes
-function calculateFontSizes(
-  title: string,
-  subtitle: string,
-  desc: string,
-  hasImage: boolean
-) {
+function calculateFontSizes(title: string, subtitle: string, desc: string, hasImage: boolean) {
   const titleLength = title.length;
   const subtitleLength = subtitle.length;
   const descLength = desc.length;
@@ -91,52 +86,81 @@ function calculateFontSizes(
   };
 }
 
-export async function GET(request: Request) {
+function decodeFromBase64Url(base64url: string): string {
+  try {
+    let base64 = base64url.replace(/-/g, "+").replace(/_/g, "/");
+    const padding = "=".repeat((4 - (base64.length % 4)) % 4);
+    base64 += padding;
+    const decoded = atob(base64);
+    return decodeURIComponent(
+      decoded
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    );
+  } catch (error: any) {
+    throw new Error(`Failed to decode: ${error?.message}`);
+  }
+}
+
+function formatDate(input?: string | Date) {
+  if (!input) return "";
+
+  const date = new Date(input);
+  if (isNaN(date.getTime())) return "";
+
+  return date.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+function parseQueryString(queryString: string): Record<string, string> {
+  const params: Record<string, string> = {};
+  const pairs = queryString.split('&');
+  for (const pair of pairs) {
+    const [key, value] = pair.split('=');
+    if (key && value) {
+      params[decodeURIComponent(key)] = decodeURIComponent(value);
+    }
+  }
+  return params;
+}
+
+export async function GET(request: Request, { params }: { params: Promise<{ slug?: string }> }) {
   try {
     const { searchParams } = new URL(request.url);
+    const { slug } = await params;
+    let p: Record<string, string> = {};
+    if (slug && slug.trim() !== "") {
+      try {
+        const encodedToken = slug.replace(/\.[^.]+$/, '');
+        const queryString = decodeFromBase64Url(encodedToken);
+        p = parseQueryString(queryString);
+      } catch (decodeError) {
+        console.log('Failed to decode slug, using default values:', decodeError);
+      }
+    }
 
-    // Check if any query params other than 'theme' are provided
-    const paramsWithoutTheme = Array.from(searchParams.keys()).filter(
-      (key) => key !== "theme"
-    );
-    const hasQueryParams = paramsWithoutTheme.length > 0;
+    // Check if any meaningful query params are provided (excluding 'theme')
+    const paramsWithoutTheme = Array.from(searchParams.keys()).filter((key) => key !== "theme");
+    const hasEncodedParams = Object.keys(p).filter((key) => key !== "theme").length > 0;
+    const hasQueryParams = paramsWithoutTheme.length > 0 || hasEncodedParams;
 
     // Get parameters with conditional defaults
-    const title =
-      searchParams.get("title") ||
-      (hasQueryParams ? "Welcome to My Blog" : "Welcome to My Portfolio");
-    const subtitle =
-      searchParams.get("subtitle") ||
-      (hasQueryParams ? "" : "I'm Pawan — Lead .NET Full-Stack Developer");
+    const title = searchParams.get("title") || p.title || (hasQueryParams ? "Welcome to My Blog" : "I’m Pawan — Explore My Portfolio");
+    const subtitle = searchParams.get("subtitle") || p.subtitle || (hasQueryParams ? "" : "[.Net Core · Cloud AWS · Microservices · Angular · React ]");
     const desc =
       searchParams.get("desc") ||
-      (hasQueryParams
-        ? ""
-        : "11+ years of experience designing, developing, and deploying enterprise-grade web applications and now advancing towards AI & ML based solutions.");
-    const themeName = (searchParams.get("theme") || "charcoal") as keyof typeof themes;
-    const author = searchParams.get("author") || "Pawan Pandey";
-    const date =
-      searchParams.get("date") ||
-      (hasQueryParams
-        ? ""
-        : new Date().toLocaleDateString("en-US", {
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-          }));
-
-    // Get theme colors
+      p.desc ||
+      (hasQueryParams ? "" : "Lead .NET Full-Stack Developer with 11+ years of experience delivering enterprise-grade web applications and advancing toward AI & ML–driven solutions.");
+    const themeName = (searchParams.get("theme") || p.theme || "charcoal") as keyof typeof themes;
+    const author = searchParams.get("author") || p.author || "Pawan Pandey";
+    const date = formatDate(searchParams.get("date") || p.date || "");
+    const readtime = searchParams.get("readtime") || p.readtime || "";
     const theme = themes[themeName] || themes.charcoal;
-
-    // Calculate dynamic sizes
-    const { titleSize, subtitleSize, descSize, maxWidth } = calculateFontSizes(
-      title,
-      subtitle,
-      desc,
-      !hasQueryParams
-    );
-
-    // Calculate total content height to determine if we need to hide image
+    const { titleSize, subtitleSize, descSize, maxWidth } = calculateFontSizes(title, subtitle, desc, !hasQueryParams);
     const estimatedContentHeight =
       titleSize * 1.3 + // title with line height
       (subtitle ? subtitleSize * 1.5 : 0) + // subtitle with spacing
@@ -313,7 +337,7 @@ export async function GET(request: Request) {
                 fontWeight: 900,
                 color: theme.textPrimary,
                 lineHeight: 1.1,
-                marginBottom: subtitle ? 30 : 50,
+                marginBottom: subtitle ? 40 : 50,
                 maxWidth: maxWidth,
                 display: "flex",
                 textShadow: `0 4px 20px ${theme.shadowColor}, 0 0 40px ${theme.glowColor}`,
@@ -408,17 +432,17 @@ export async function GET(request: Request) {
                 >
                   {author}
                 </div>
-                {date && (
-                  <div
-                    style={{
-                      fontSize: 20,
-                      color: theme.textMuted,
-                      display: "flex",
-                    }}
-                  >
-                    {date}
-                  </div>
-                )}
+                <div
+                  style={{
+                    fontSize: 20,
+                    color: theme.textMuted,
+                    display: "flex",
+                    gap: "15px",
+                  }}
+                >
+                  {date && <span style={{ display: "flex" }}>{date}</span>}
+                  {readtime && <span style={{ display: "flex" }}>• Estimated read: {readtime}</span>}
+                </div>
               </div>
             </div>
           </div>
