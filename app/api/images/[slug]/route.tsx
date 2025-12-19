@@ -1,6 +1,6 @@
 import { ImageResponse } from "@vercel/og";
 
-export const runtime = "nodejs";
+export const runtime = "edge";
 
 // Theme configurations matching your CSS
 const themes = {
