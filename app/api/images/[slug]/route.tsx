@@ -1,4 +1,7 @@
 import { ImageResponse } from '@vercel/og';
+import { NextRequest } from 'next/server';
+
+export const runtime = 'edge';
 
 // Default values
 const DEFAULT_VALUES = {
@@ -71,7 +74,7 @@ function decodeBase64Url(token: string): Record<string, string> {
     while (base64.length % 4) {
       base64 += '=';
     }
-    const decoded = Buffer.from(base64, 'base64').toString('utf8');
+    const decoded = atob(base64);
     
     const params: Record<string, string> = {};
     decoded.split('&').forEach(pair => {
@@ -91,14 +94,13 @@ function isBase64Url(str: string): boolean {
   return /^[A-Za-z0-9\-_]+$/.test(str) && str.length > 20;
 }
 
+type Params = Promise<{ slug?: string }> | { slug?: string };
+
 export async function GET(
-  request: Request,
-  context: { params: Promise<{ slug?: string }> }
+  request: NextRequest,
+  context: { params: Params }
 ) {
   try {
-    console.log('Request URL:', request.url);
-    console.log('Context received:', typeof context);
-    
     const { searchParams } = new URL(request.url);
     
     // Handle both Next.js 15+ (async params) and Next.js 14 (sync params)
@@ -106,9 +108,7 @@ export async function GET(
       ? await context.params 
       : context.params;
     
-    console.log('Resolved params:', resolvedParams);
     const rawSlug = resolvedParams?.slug;
-
     const slug = rawSlug?.replace(/\.png$/, '') || 'default';
 
     let ogData = { ...DEFAULT_VALUES };
@@ -455,8 +455,6 @@ export async function GET(
     );
   } catch (error) {
     console.error('Error generating OG image:', error);
-    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
-    console.error('Error message:', error instanceof Error ? error.message : String(error));
     
     return new ImageResponse(
       (
