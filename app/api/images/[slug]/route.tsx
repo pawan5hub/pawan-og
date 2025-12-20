@@ -93,11 +93,21 @@ function isBase64Url(str: string): boolean {
 
 export async function GET(
   request: Request,
-  { params }: { params: Promise<{ slug?: string }> }
+  context: { params: Promise<{ slug?: string }> }
 ) {
   try {
+    console.log('Request URL:', request.url);
+    console.log('Context received:', typeof context);
+    
     const { searchParams } = new URL(request.url);
-    const { slug: rawSlug } = await params;
+    
+    // Handle both Next.js 15+ (async params) and Next.js 14 (sync params)
+    const resolvedParams = context.params instanceof Promise 
+      ? await context.params 
+      : context.params;
+    
+    console.log('Resolved params:', resolvedParams);
+    const rawSlug = resolvedParams?.slug;
 
     const slug = rawSlug?.replace(/\.png$/, '') || 'default';
 
@@ -445,6 +455,8 @@ export async function GET(
     );
   } catch (error) {
     console.error('Error generating OG image:', error);
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+    console.error('Error message:', error instanceof Error ? error.message : String(error));
     
     return new ImageResponse(
       (
