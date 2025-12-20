@@ -1,9 +1,20 @@
-import { ImageResponse } from "@vercel/og";
+import { ImageResponse } from '@vercel/og';
 
-export const runtime = "nodejs";
+// Default values
+const DEFAULT_VALUES = {
+  title: "I'm Pawan — Explore My Portfolio",
+  subtitle: '[.Net Core · Cloud AWS · Microservices · Angular · React]',
+  desc: '11+ years of experience designing, developing, and deploying enterprise-grade web applications and now advancing towards AI & ML based solutions.',
+  author: 'https://pawan.net.in',
+  date: '',
+  readtime: '',
+  theme: 'charcoal',
+  status: 'Open to Opportunities',
+  msg: 'Turning Concepts Into Code & Creations'
+};
 
-// Theme configurations matching your CSS
-const themes = {
+// Theme configurations
+const THEMES = {
   charcoal: {
     primary: "#00ffcc",
     secondary: "#1a2f2f",
@@ -18,6 +29,7 @@ const themes = {
     bgGradientEnd: "#1a1a1a",
     glowColor: "rgba(0, 255, 204, 0.4)",
     shadowColor: "rgba(0, 255, 204, 0.3)",
+    icon: "https://pawan.net.in/assets/images/icons/charcoal_32x32.png",
   },
   lavender: {
     primary: "#c084fc",
@@ -33,6 +45,7 @@ const themes = {
     bgGradientEnd: "#1a0f2e",
     glowColor: "rgba(192, 132, 252, 0.4)",
     shadowColor: "rgba(192, 132, 252, 0.3)",
+    icon: "https://pawan.net.in/assets/images/icons/lavender_32x32.png",
   },
   pearl: {
     primary: "#f59e0b",
@@ -48,455 +61,380 @@ const themes = {
     bgGradientEnd: "#f8fafb",
     glowColor: "rgba(245, 158, 11, 0.3)",
     shadowColor: "rgba(245, 158, 11, 0.2)",
+    icon: "https://pawan.net.in/assets/images/icons/pearl_32x32.png",
   },
 };
 
-// Helper function to calculate dynamic font sizes
-function calculateFontSizes(title: string, subtitle: string, desc: string, hasImage: boolean) {
-  const titleLength = title.length;
-  const subtitleLength = subtitle.length;
-  const descLength = desc.length;
-
-  // Calculate title size (base: 80, min: 48, max: 80)
-  let titleSize = 80;
-  if (titleLength > 50) titleSize = 48;
-  else if (titleLength > 30) titleSize = 60;
-  else if (titleLength > 20) titleSize = 70;
-
-  // Calculate subtitle size (base: 38, min: 24, max: 38)
-  let subtitleSize = 38;
-  if (subtitleLength > 80) subtitleSize = 24;
-  else if (subtitleLength > 50) subtitleSize = 28;
-  else if (subtitleLength > 30) subtitleSize = 32;
-
-  // Calculate description size (base: 24, min: 18, max: 24)
-  let descSize = 24;
-  if (descLength > 150) descSize = 18;
-  else if (descLength > 100) descSize = 20;
-  else if (descLength > 80) descSize = 22;
-
-  // Adjust max widths based on whether image is present
-  const maxWidth = hasImage ? "650px" : "950px";
-
-  return {
-    titleSize,
-    subtitleSize,
-    descSize,
-    maxWidth,
-  };
-}
-
-function decodeFromBase64Url(base64url: string): string {
+function decodeBase64Url(token: string): Record<string, string> {
   try {
-    let base64 = base64url.replace(/-/g, "+").replace(/_/g, "/");
-    const padding = "=".repeat((4 - (base64.length % 4)) % 4);
-    base64 += padding;
-    const decoded = atob(base64);
-    return decodeURIComponent(
-      decoded
-        .split("")
-        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-        .join("")
-    );
-  } catch (error: any) {
-    throw new Error(`Failed to decode: ${error?.message}`);
-  }
-}
-
-function formatDate(input?: string | Date) {
-  if (!input) return "";
-
-  const date = new Date(input);
-  if (isNaN(date.getTime())) return "";
-
-  return date.toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-}
-
-function parseQueryString(queryString: string): Record<string, string> {
-  const params: Record<string, string> = {};
-  const pairs = queryString.split('&');
-  for (const pair of pairs) {
-    const [key, value] = pair.split('=');
-    if (key && value) {
-      params[decodeURIComponent(key)] = decodeURIComponent(value);
+    let base64 = token.replace(/-/g, '+').replace(/_/g, '/');
+    while (base64.length % 4) {
+      base64 += '=';
     }
+    const decoded = Buffer.from(base64, 'base64').toString('utf8');
+    
+    const params: Record<string, string> = {};
+    decoded.split('&').forEach(pair => {
+      const [key, value] = pair.split('=');
+      if (key && value) {
+        params[decodeURIComponent(key)] = decodeURIComponent(value);
+      }
+    });
+    return params;
+  } catch (error) {
+    console.error('Failed to decode base64:', error);
+    return {};
   }
-  return params;
 }
 
-export async function GET(request: Request, { params }: { params: Promise<{ slug?: string }> }) {
+function isBase64Url(str: string): boolean {
+  return /^[A-Za-z0-9\-_]+$/.test(str) && str.length > 20;
+}
+
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ slug?: string }> }
+) {
   try {
     const { searchParams } = new URL(request.url);
-    const { slug } = await params;
-    let p: Record<string, string> = {};
-    if (slug && slug.trim() !== "") {
-      try {
-        const encodedToken = slug.replace(/\.[^.]+$/, '');
-        const queryString = decodeFromBase64Url(encodedToken);
-        p = parseQueryString(queryString);
-      } catch (decodeError) {
-        console.log('Failed to decode slug, using default values:', decodeError);
-      }
+    const { slug: rawSlug } = await params;
+
+    const slug = rawSlug?.replace(/\.png$/, '') || 'default';
+
+    let ogData = { ...DEFAULT_VALUES };
+    let isBase64Slug = false;
+
+    // Check if slug is base64 and decode it first
+    if (slug !== 'default' && isBase64Url(slug)) {
+      const decodedParams = decodeBase64Url(slug);
+      isBase64Slug = true;
+      
+      ogData = {
+        title: decodedParams.title || ogData.title,
+        subtitle: decodedParams.subtitle || ogData.subtitle,
+        desc: decodedParams.desc || ogData.desc,
+        author: decodedParams.author || 'https://pawan.net.in',
+        date: decodedParams.date || '',
+        readtime: decodedParams.readtime || '',
+        theme: decodedParams.theme || ogData.theme,
+        status: 'Open to Opportunities',
+        msg: decodedParams.msg || 'https://pawan.net.in'
+      };
     }
 
-    // Check if any meaningful query params are provided (excluding 'theme')
-    const paramsWithoutTheme = Array.from(searchParams.keys()).filter((key) => key !== "theme");
-    const hasEncodedParams = Object.keys(p).filter((key) => key !== "theme").length > 0;
-    const hasQueryParams = paramsWithoutTheme.length > 0 || hasEncodedParams;
+    // Priority: Query param theme overrides everything (including base64 theme)
+    const themeParam = searchParams.get('theme');
+    if (themeParam && THEMES[themeParam as keyof typeof THEMES]) {
+      ogData.theme = themeParam;
+    }
 
-    // Get parameters with conditional defaults
-    const title = searchParams.get("title") || p.title || (hasQueryParams ? "Welcome to My Blog" : "I’m Pawan — Explore My Portfolio");
-    const subtitle = searchParams.get("subtitle") || p.subtitle || (hasQueryParams ? "" : "[.Net Core · Cloud AWS · Microservices · Angular · React ]");
-    const desc =
-      searchParams.get("desc") ||
-      p.desc ||
-      (hasQueryParams ? "" : "Lead .NET Full-Stack Developer with 11+ years of experience delivering enterprise-grade web applications and advancing toward AI & ML–driven solutions.");
-    const themeName = (searchParams.get("theme") || p.theme || "charcoal") as keyof typeof themes;
-    const author = searchParams.get("author") || p.author || "Pawan Pandey";
-    const date = formatDate(searchParams.get("date") || p.date || "");
-    const readtime = searchParams.get("readtime") || p.readtime || "";
-    const theme = themes[themeName] || themes.charcoal;
-    const { titleSize, subtitleSize, descSize, maxWidth } = calculateFontSizes(title, subtitle, desc, !hasQueryParams);
-    const estimatedContentHeight =
-      titleSize * 1.3 + // title with line height
-      (subtitle ? subtitleSize * 1.5 : 0) + // subtitle with spacing
-      (desc ? descSize * 1.8 : 0) + // description with spacing
-      120 + // author section
-      180; // padding and margins
-
-    const shouldShowImage = !hasQueryParams && estimatedContentHeight < 500;
+    const theme = THEMES[ogData.theme as keyof typeof THEMES] || THEMES.charcoal;
 
     return new ImageResponse(
       (
         <div
           style={{
-            height: "100%",
-            width: "100%",
-            display: "flex",
-            flexDirection: "column",
-            position: "relative",
+            height: '100%',
+            width: '100%',
+            display: 'flex',
+            position: 'relative',
             background: `linear-gradient(135deg, ${theme.bgGradientStart} 0%, ${theme.bgGradientMid} 50%, ${theme.bgGradientEnd} 100%)`,
-            padding: 0,
-            overflow: "hidden",
+            fontFamily: 'system-ui, -apple-system, sans-serif',
           }}
         >
-          {/* Animated background elements */}
+          {/* Decorative line - top left with gradient and glow */}
           <div
             style={{
-              position: "absolute",
-              top: "-100px",
-              left: "-100px",
-              width: "400px",
-              height: "400px",
-              borderRadius: "50%",
-              background: `radial-gradient(circle, ${theme.primary}33 0%, transparent 70%)`,
-              filter: "blur(60px)",
-              opacity: 0.6,
+              position: 'absolute',
+              top: '40px',
+              left: '60px',
+              width: '120px',
+              height: '4px',
+              background: `linear-gradient(90deg, ${theme.primary} 0%, ${theme.accent} 100%)`,
+              borderRadius: '2px',
+              display: 'flex',
+              boxShadow: `0 0 20px ${theme.glowColor}, 0 0 40px ${theme.glowColor}`,
             }}
           />
+          
+          {/* Decorative dots - top right with glow */}
           <div
             style={{
-              position: "absolute",
-              bottom: "-150px",
-              right: "-150px",
-              width: "500px",
-              height: "500px",
-              borderRadius: "50%",
-              background: `radial-gradient(circle, ${theme.accent}33 0%, transparent 70%)`,
-              filter: "blur(80px)",
-              opacity: 0.5,
-            }}
-          />
-          <div
-            style={{
-              position: "absolute",
-              top: "30%",
-              right: "10%",
-              width: "300px",
-              height: "300px",
-              borderRadius: "50%",
-              background: `radial-gradient(circle, ${theme.secondary}44 0%, transparent 70%)`,
-              filter: "blur(70px)",
-              opacity: 0.4,
-            }}
-          />
-
-          {/* Decorative grid pattern overlay */}
-          <div
-            style={{
-              position: "absolute",
-              width: "100%",
-              height: "100%",
-              backgroundImage: `linear-gradient(${theme.primary}11 1px, transparent 1px), linear-gradient(90deg, ${theme.primary}11 1px, transparent 1px)`,
-              backgroundSize: "50px 50px",
-              opacity: 0.15,
-            }}
-          />
-
-          {/* Profile Image - Only when no params and content fits */}
-          {shouldShowImage && (
-            <div
-              style={{
-                position: "absolute",
-                right: "1px",
-                bottom: "0",
-                height: "630px",
-                width: "350px",
-                display: "flex",
-                alignItems: "flex-end",
-                justifyContent: "flex-end",
-                zIndex: 0,
-                overflow: "visible",
-              }}
-            >
-              <div
-                style={{
-                  position: "relative",
-                  height: "630px",
-                  width: "350px",
-                  display: "flex",
-                  alignItems: "flex-end",
-                  justifyContent: "flex-end",
-                }}
-              >
-                <img
-                  src="https://pawan.net.in/assets/images/profile-wbg2.png"
-                  width="300"
-                  height="330"
-                  style={{
-                    position: "absolute",
-                    bottom: "0",
-                    right: "0",
-                    objectFit: "cover",
-                    objectPosition: "center bottom",
-                  }}
-                />
-                <div
-                  style={{
-                    position: "absolute",
-                    bottom: "0",
-                    left: "0",
-                    right: "0",
-                    height: "280px",
-                    background: `linear-gradient(to top, ${theme.bgGradientEnd} 0%, ${theme.bgGradientEnd}f8 15%, ${theme.bgGradientEnd}e6 30%, ${theme.bgGradientEnd}b8 50%, ${theme.bgGradientEnd}80 70%, ${theme.bgGradientEnd}40 85%, transparent 100%)`,
-                    zIndex: 1,
-                    pointerEvents: "none",
-                  }}
-                />
-                <div
-                  style={{
-                    position: "absolute",
-                    bottom: "0",
-                    left: "0",
-                    top: "0",
-                    width: "200px",
-                    background: `linear-gradient(to right, ${theme.bgGradientEnd} 0%, ${theme.bgGradientEnd}f0 20%, ${theme.bgGradientEnd}c0 40%, ${theme.bgGradientEnd}80 60%, ${theme.bgGradientEnd}40 80%, transparent 100%)`,
-                    zIndex: 1,
-                    pointerEvents: "none",
-                  }}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Main content container */}
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "flex-start",
-              alignItems: "flex-start",
-              padding: "80px 100px",
-              paddingTop: "100px",
-              height: "100%",
-              position: "relative",
-              zIndex: 2,
-              maxWidth: "100%",
+              position: 'absolute',
+              top: '40px',
+              right: '60px',
+              display: 'flex',
+              gap: '12px',
             }}
           >
-            {/* Accent bar */}
             <div
               style={{
-                width: "120px",
-                height: "6px",
-                background: `linear-gradient(90deg, ${theme.primary} 0%, ${theme.accent} 100%)`,
-                marginBottom: "40px",
-                borderRadius: "3px",
-                boxShadow: `0 0 20px ${theme.glowColor}`,
+                width: '16px',
+                height: '16px',
+                borderRadius: '50%',
+                background: theme.primary,
+                display: 'flex',
+                boxShadow: `0 0 15px ${theme.glowColor}, 0 0 30px ${theme.glowColor}`,
               }}
             />
-
-            {/* Title */}
             <div
               style={{
-                fontSize: titleSize,
-                fontWeight: 900,
-                color: theme.textPrimary,
-                lineHeight: 1.1,
-                marginBottom: subtitle ? 40 : 50,
-                maxWidth: maxWidth,
-                display: "flex",
-                textShadow: `0 4px 20px ${theme.shadowColor}, 0 0 40px ${theme.glowColor}`,
-                letterSpacing: titleSize > 60 ? "-2px" : "-1px",
-                flexWrap: "wrap",
+                width: '16px',
+                height: '16px',
+                borderRadius: '50%',
+                background: theme.accent,
+                display: 'flex',
+                boxShadow: `0 0 15px ${theme.shadowColor}, 0 0 30px ${theme.shadowColor}`,
               }}
-            >
-              {title}
-            </div>
-
-            {/* Subtitle */}
-            {subtitle && (
-              <div
-                style={{
-                  fontSize: subtitleSize,
-                  fontWeight: 400,
-                  color: theme.textSecondary,
-                  lineHeight: 1.4,
-                  maxWidth: maxWidth,
-                  display: "flex",
-                  marginBottom: desc ? "30px" : "50px",
-                  letterSpacing: "-0.5px",
-                  flexWrap: "wrap",
-                }}
-              >
-                {subtitle}
-              </div>
-            )}
-
-            {/* Description */}
-            {desc && (
-              <div
-                style={{
-                  fontSize: descSize,
-                  fontWeight: 300,
-                  color: theme.textMuted,
-                  lineHeight: 1.5,
-                  maxWidth: maxWidth,
-                  display: "flex",
-                  marginBottom: "50px",
-                  letterSpacing: "0px",
-                  flexWrap: "wrap",
-                }}
-              >
-                {desc}
-              </div>
-            )}
-
-            {/* Author and date section */}
+            />
             <div
               style={{
-                display: "flex",
-                alignItems: "center",
-                marginTop: "auto",
-                gap: "20px",
+                width: '16px',
+                height: '16px',
+                borderRadius: '50%',
+                background: theme.textMuted,
+                display: 'flex',
+                boxShadow: `0 0 10px ${theme.textMuted}80`,
               }}
-            >
-              {/* Author avatar */}
-              <div
-                style={{
-                  width: "60px",
-                  height: "60px",
-                  borderRadius: "50%",
-                  background: `linear-gradient(135deg, ${theme.primary} 0%, ${theme.accent} 100%)`,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: 24,
-                  fontWeight: 700,
-                  color: theme.background,
-                  boxShadow: `0 0 30px ${theme.glowColor}`,
-                }}
-              >
-                {author.charAt(0).toUpperCase()}
-              </div>
-
-              {/* Author info */}
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "5px",
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 28,
-                    fontWeight: 600,
-                    color: theme.textPrimary,
-                    display: "flex",
-                  }}
-                >
-                  {author}
-                </div>
-                <div
-                  style={{
-                    fontSize: 20,
-                    color: theme.textMuted,
-                    display: "flex",
-                    gap: "15px",
-                  }}
-                >
-                  {date && <span style={{ display: "flex" }}>{date}</span>}
-                  {readtime && <span style={{ display: "flex" }}>• Estimated read: {readtime}</span>}
-                </div>
-              </div>
-            </div>
+            />
           </div>
 
-          {/* Bottom accent line */}
+          {/* Main Content Container */}
           <div
             style={{
-              position: "absolute",
-              bottom: 0,
-              left: 0,
-              right: 0,
-              height: "4px",
-              background: `linear-gradient(90deg, ${theme.primary} 0%, ${theme.accent} 50%, ${theme.secondary} 100%)`,
-              boxShadow: `0 -2px 30px ${theme.glowColor}`,
-            }}
-          />
-
-          {/* Corner decoration */}
-          <div
-            style={{
-              position: "absolute",
-              top: "60px",
-              right: "100px",
-              display: "flex",
-              gap: "15px",
+              display: 'flex',
+              width: '100%',
+              padding: '80px 60px 60px 60px',
             }}
           >
+            {/* Left Content */}
             <div
               style={{
-                width: "12px",
-                height: "12px",
-                borderRadius: "50%",
-                backgroundColor: theme.primary,
-                boxShadow: `0 0 15px ${theme.primary}`,
+                display: 'flex',
+                flexDirection: 'column',
+                flex: '1',
+                justifyContent: 'space-between',
+                paddingRight: '20px',
+                maxWidth: isBase64Slug ? '100%' : '750px',
               }}
-            />
-            <div
-              style={{
-                width: "12px",
-                height: "12px",
-                borderRadius: "50%",
-                backgroundColor: theme.accent,
-                boxShadow: `0 0 15px ${theme.accent}`,
-              }}
-            />
-            <div
-              style={{
-                width: "12px",
-                height: "12px",
-                borderRadius: "50%",
-                backgroundColor: theme.secondary,
-                boxShadow: `0 0 15px ${theme.secondary}`,
-              }}
-            />
+            >
+              {/* Top Content */}
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {/* Title */}
+                <div
+                  style={{
+                    fontSize: '58px',
+                    fontWeight: '700',
+                    color: theme.textPrimary,
+                    lineHeight: 1.1,
+                    marginBottom: '20px',
+                    display: 'flex',
+                  }}
+                >
+                  {ogData.title}
+                </div>
+
+                {/* Subtitle */}
+                <div
+                  style={{
+                    fontSize: '26px',
+                    color: theme.textSecondary,
+                    marginBottom: '30px',
+                    fontWeight: '400',
+                    display: 'flex',
+                  }}
+                >
+                  {ogData.subtitle || ' '}
+                </div>
+
+                {/* Description */}
+                <div
+                  style={{
+                    fontSize: '22px',
+                    color: theme.textMuted,
+                    lineHeight: 1.6,
+                    display: 'flex',
+                  }}
+                >
+                  {ogData.desc || ' '}
+                </div>
+              </div>
+
+              {/* Bottom Content - Footer */}
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '20px',
+                }}
+              >
+                {/* Author and Status/DateTime Row */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  {/* Author Info */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '15px',
+                    }}
+                  >
+                    {/* Logo Icon */}
+                    <img
+                      src={theme.icon}
+                      width="32"
+                      height="32"
+                      style={{
+                        objectFit: 'contain',
+                      }}
+                    />
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <div
+                        style={{
+                          fontSize: '20px',
+                          color: theme.textPrimary,
+                          fontWeight: '600',
+                          display: 'flex',
+                        }}
+                      >
+                        {ogData.author}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: '16px',
+                          color: theme.textMuted,
+                          display: 'flex',
+                        }}
+                      >
+                        {ogData.msg}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Right Side - Date/Reading Time only for base64 */}
+                  {isBase64Slug && (ogData.date || ogData.readtime) && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'flex-end' }}>
+                      {ogData.date && (
+                        <div
+                          style={{
+                            fontSize: '18px',
+                            color: theme.textMuted,
+                            display: 'flex',
+                          }}
+                        >
+                          📆 Published: {ogData.date}
+                        </div>
+                      )}
+                      {ogData.readtime && (
+                        <div
+                          style={{
+                            fontSize: '18px',
+                            color: theme.textMuted,
+                            display: 'flex',
+                          }}
+                        >
+                          🕒 {ogData.readtime} read
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Right Side - Profile Image Container - Only show for default/non-base64 slugs */}
+            {!isBase64Slug && (
+              <div
+                style={{
+                  position: 'absolute',
+                  right: '1px',
+                  bottom: '0',
+                  height: '630px',
+                  width: '350px',
+                  display: 'flex',
+                  alignItems: 'flex-end',
+                  justifyContent: 'flex-end',
+                }}
+              >
+                {/* Inner container for image and gradients */}
+                <div
+                  style={{
+                    position: 'relative',
+                    height: '630px',
+                    width: '350px',
+                    display: 'flex',
+                    alignItems: 'flex-end',
+                    justifyContent: 'flex-end',
+                  }}
+                >
+                  {/* Profile Image */}
+                  <img
+                    src="https://pawan.net.in/assets/images/profile-wbg2.png"
+                    width="300"
+                    height="330"
+                    style={{
+                      position: 'absolute',
+                      bottom: '0',
+                      right: '0',
+                      objectFit: 'cover',
+                      objectPosition: 'center bottom',
+                    }}
+                  />
+                  
+                  {/* Bottom gradient overlay */}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      bottom: '0',
+                      left: '0',
+                      right: '0',
+                      height: '280px',
+                      background: `linear-gradient(to top, ${theme.bgGradientEnd} 0%, ${theme.bgGradientEnd}f8 15%, ${theme.bgGradientEnd}e6 30%, ${theme.bgGradientEnd}b8 50%, ${theme.bgGradientEnd}80 70%, ${theme.bgGradientEnd}40 85%, transparent 100%)`,
+                      display: 'flex',
+                    }}
+                  />
+                  
+                  {/* Left gradient overlay */}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      bottom: '0',
+                      left: '0',
+                      top: '0',
+                      width: '200px',
+                      background: `linear-gradient(to right, ${theme.bgGradientEnd} 0%, ${theme.bgGradientEnd}f0 20%, ${theme.bgGradientEnd}c0 40%, ${theme.bgGradientEnd}80 60%, ${theme.bgGradientEnd}40 80%, transparent 100%)`,
+                      display: 'flex',
+                    }}
+                  />
+                  
+                  {/* HIRE READY badge centered at bottom of image */}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      bottom: '20px',
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      fontSize: '18px',
+                      color: theme.primary,
+                      background: `${theme.primary}15`,
+                      padding: '10px 24px',
+                      borderRadius: '25px',
+                      fontWeight: '600',
+                      border: `2px solid ${theme.primary}40`,
+                      display: 'flex',
+                      boxShadow: `0 0 20px ${theme.glowColor}`,
+                    }}
+                  >
+                    {ogData.status}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       ),
@@ -505,10 +443,31 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
         height: 630,
       }
     );
-  } catch (e: any) {
-    console.log(`${e.message}`);
-    return new Response(`Failed to generate the image`, {
-      status: 500,
-    });
+  } catch (error) {
+    console.error('Error generating OG image:', error);
+    
+    return new ImageResponse(
+      (
+        <div
+          style={{
+            height: '100%',
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: '#1a1a1a',
+            color: '#ffffff',
+            fontSize: '40px',
+            fontFamily: 'system-ui, sans-serif',
+          }}
+        >
+          ⧉ EXplore PaWaN's Portfolio
+        </div>
+      ),
+      {
+        width: 1200,
+        height: 630,
+      }
+    );
   }
 }
