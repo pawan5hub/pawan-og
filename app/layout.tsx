@@ -24,11 +24,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased h-screen w-screen`} 
-      >
-        {children}
-      </body>
+      <head>
+        <meta content="max-age=31536000, public" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <link rel="icon" type="image/png" href="favicon.ico" />
+      </head>
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased h-screen w-screen`}>{children}</body>
     </html>
   );
 }
